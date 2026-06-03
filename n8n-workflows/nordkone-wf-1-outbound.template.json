@@ -1,0 +1,113 @@
+{
+  "name": "NordKone WF-1 Outbound Seller Check",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "cron",
+      "name": "Business-hours Cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.NORDKONE_API_BASE_URL}}/api/outbound/candidates?limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.NORDKONE_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "fetch-candidate",
+      "name": "Fetch Candidate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://wasup.northeurope.cloudapp.azure.com/api/send",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"from_phone\": $env.NORDKONE_FROM_PHONE, \"to_phone\": $json.candidates[0].normalized_phone, \"message\": $json.candidates[0].outbound_message}"
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NORDKONE_API_BASE_URL}}/api/outbound/sent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.NORDKONE_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"nettikone_id\": $('Fetch Candidate').item.json.candidates[0].nettikone_id, \"number\": $('Fetch Candidate').item.json.candidates[0].normalized_phone, \"message\": $('Fetch Candidate').item.json.candidates[0].outbound_message, \"provider\": \"wasup\", \"provider_message_id\": $json.message_id || $json.id || null, \"raw_data\": $json}"
+      },
+      "id": "record-sent",
+      "name": "Record Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Business-hours Cron": {
+      "main": [
+        [
+          {
+            "node": "Fetch Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Candidate": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Record Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

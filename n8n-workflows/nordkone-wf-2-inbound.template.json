@@ -1,0 +1,97 @@
+{
+  "name": "NordKone WF-2 Inbound Seller Replies",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "nordkone/wasup/inbound",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "id": "wasup-webhook",
+      "name": "Wasup Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const message = ($json.body?.message || $json.message || '').toLowerCase();\nlet classification = 'unclear';\nlet needs_human = true;\nif (/myyty|meni jo|ei ole enää|ei ole enaa/.test(message)) { classification = 'sold'; needs_human = false; }\nelse if (/ei kiinnosta|lopeta|poista|älä|ala laita/.test(message)) { classification = 'opted_out'; needs_human = false; }\nelse if (/kyllä|kylla|joo|juu|on kaupan|edelleen|soita|tarjous|kiinnostaa/.test(message)) { classification = 'interested'; needs_human = true; }\nreturn [{ json: { ...$json, classification, needs_human } }];"
+      },
+      "id": "classify",
+      "name": "Classify Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NORDKONE_API_BASE_URL}}/api/webhooks/wasup/inbound",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.NORDKONE_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{$json}}"
+      },
+      "id": "record-inbound",
+      "name": "Record Inbound",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true, \"classification\": $json.classification, \"needs_human\": $json.needs_human}"
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Wasup Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "Classify Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Reply": {
+      "main": [
+        [
+          {
+            "node": "Record Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Inbound": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
