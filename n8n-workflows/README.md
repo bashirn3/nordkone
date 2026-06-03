@@ -45,7 +45,7 @@ dashboard toggle is paused.
    - `classification`
    - `needs_human`
 5. `POST /api/webhooks/wasup/inbound` records the inbound reply and status.
-6. `POST https://wasup.northeurope.cloudapp.azure.com/api/send` replies to the seller.
+6. `POST https://wasup2.northeurope.cloudapp.azure.com/api/send` replies to the seller.
 7. Webhook responds with classification and `reply_sent = true`.
 
 The AI node must use `Azure OpenAI Chat Model`, matching the existing workflows.

@@ -16,17 +16,23 @@
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    apiBaseUrl: 'https://YOUR-VERCEL-URL',\n    apiKey: 'PASTE_BRIDGE_API_KEY_HERE',\n    wasupSendUrl: 'https://wasup.northeurope.cloudapp.azure.com/api/send',\n    fromPhone: 'PASTE_WASUP_SENDER_PHONE_HERE',\n    // Fill this with your own phone for the first end-to-end test.\n    // Leave empty before launch so real seller numbers are used.\n    testRecipientPhone: '',\n    candidateLimit: 1\n  }\n}];"
+        "jsCode": "return [{\n  json: {\n    apiBaseUrl: 'https://nordkone.vercel.app',\n    apiKey: 'RapidScreenNordKone',\n    wasupSendUrl: 'https://wasup2.northeurope.cloudapp.azure.com/api/send',\n    fromPhone: '358454913025',\n    // Fill this with your own phone for the first end-to-end test.\n    // Leave empty before launch so real seller numbers are used.\n    testRecipientPhone: '2347067131336',\n    candidateLimit: 1\n  }\n}];"
       },
       "id": "workflow-config",
       "name": "Workflow Config",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -46,7 +52,10 @@
       "name": "Fetch Candidate",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [460, 0]
+      "position": [
+        460,
+        0
+      ]
     },
     {
       "parameters": {
@@ -56,7 +65,10 @@
       "name": "Prepare Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 0]
+      "position": [
+        700,
+        0
+      ]
     },
     {
       "parameters": {
@@ -70,7 +82,10 @@
       "name": "Send WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [940, 0]
+      "position": [
+        940,
+        0
+      ]
     },
     {
       "parameters": {
@@ -93,7 +108,10 @@
       "name": "Record Sent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1180, 0]
+      "position": [
+        1180,
+        0
+      ]
     }
   ],
   "connections": {

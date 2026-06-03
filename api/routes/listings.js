@@ -163,6 +163,46 @@ router.get('/outbound/candidates', async (req, res) => {
   });
 });
 
+router.get('/outbound/context', async (req, res) => {
+  const supabase = createSupabase();
+  const rawNumber = String(req.query.number || req.query.phone || req.query.q || '').trim();
+  const number = normalizePhone(rawNumber);
+
+  if (!number) return res.status(400).json({ error: 'valid number is required' });
+
+  const { data: session, error: sessionError } = await supabase
+    .from('campaign_outbound_sessions')
+    .select('*')
+    .eq('client_key', CLIENT_KEY)
+    .eq('source_system', SOURCE_SYSTEM)
+    .eq('number', number)
+    .order('last_outbound_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (sessionError) throw sessionError;
+
+  let listing = null;
+  if (session?.source_customer_id) {
+    const { data, error } = await supabase
+      .from('nordkone_listings')
+      .select('*')
+      .eq('client_key', CLIENT_KEY)
+      .eq('nettikone_id', session.source_customer_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    listing = data ? listingRowToResponse(data) : listingFromSession(session);
+  }
+
+  res.json({
+    context_source: session ? 'outbound_session' : 'none',
+    session,
+    listing,
+    listings: listing ? [listing] : [],
+  });
+});
+
 router.post('/outbound/sent', async (req, res) => {
   const supabase = createSupabase();
   const {
@@ -287,6 +327,24 @@ router.post('/message-status', async (req, res) => {
 
 function buildOutboundMessage(machineTitle) {
   return `Moikka! Sulla oli Nettikoneessa ${machineTitle || 'kone'} myynnissä. Onko se edelleen kaupan?`;
+}
+
+function listingFromSession(session = {}) {
+  const rawData = session.raw_data || {};
+  const nettikoneId = session.source_customer_id || rawData.nettikone_id;
+  if (!nettikoneId && !rawData.listing_url && !rawData.machine_title) return null;
+
+  return {
+    source_customer_id: nettikoneId,
+    nettikone_id: nettikoneId,
+    listing_url: rawData.listing_url || null,
+    canonical_url: rawData.listing_url || null,
+    machine_title: rawData.machine_title || nettikoneId || 'kone',
+    normalized_phone: session.number,
+    status: session.status,
+    interest_status: session.interest_status,
+    raw_data: rawData,
+  };
 }
 
 async function loadListing(supabase, { listing_id, nettikone_id }) {
