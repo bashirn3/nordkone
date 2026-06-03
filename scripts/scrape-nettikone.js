@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
+import dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 import { firstValidPhone, extractPhoneCandidates } from '../api/lib/phone.js';
 import { createSupabase, hasSupabaseConfig } from '../api/lib/supabase.js';
 import { CLIENT_KEY, SOURCE_SYSTEM } from '../api/lib/campaign.js';
+
+dotenv.config({ override: true });
 
 const BASE_URL = process.env.NETTIKONE_BASE_URL || 'https://www.nettikone.com';
 const DEFAULT_CATEGORY = process.env.NETTIKONE_DEFAULT_CATEGORY || 'kaivinkone';

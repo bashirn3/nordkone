@@ -51,68 +51,126 @@ function App() {
 
   const cards = useMemo(
     () => [
-      ['Eligible', summary?.eligible_prospects || summary?.eligible || 0],
-      ['Contacted', summary?.contacted || summary?.contacted_listings || 0],
-      ['Replied', summary?.replied || 0],
-      ['Interested', summary?.interested || summary?.interested_listings || 0],
-      ['Needs human', summary?.needs_human || 0],
-      ['Description phones', summary?.description_phone_count || 0],
+      {
+        label: 'Ready to contact',
+        value: summary?.eligible_prospects || summary?.eligible || 0,
+        hint: 'Listings with usable seller phone',
+        tone: 'primary',
+      },
+      {
+        label: 'Contacted',
+        value: summary?.contacted || summary?.contacted_listings || 0,
+        hint: 'WhatsApp sessions opened',
+        tone: 'neutral',
+      },
+      {
+        label: 'Replies',
+        value: summary?.replied || 0,
+        hint: 'Inbound seller responses',
+        tone: 'neutral',
+      },
+      {
+        label: 'Interested',
+        value: summary?.interested || summary?.interested_listings || 0,
+        hint: 'Hand-off candidates',
+        tone: 'success',
+      },
+      {
+        label: 'Needs human',
+        value: summary?.needs_human || 0,
+        hint: 'Unclear or valuable replies',
+        tone: 'warning',
+      },
+      {
+        label: 'Lisätiedot phones',
+        value: summary?.description_phone_count || 0,
+        hint: 'Preferred source captured',
+        tone: 'source',
+      },
     ],
     [summary]
   );
 
+  const selectedMessage = selected
+    ? `Moikka! Sulla oli Nettikoneessa ${selected.machine_title} myynnissä. Onko se edelleen kaupan?`
+    : '';
+
   return (
     <main className="shell">
       <header className="hero">
-        <div>
-          <p className="eyebrow">NordKone</p>
+        <div className="hero-copy">
+          <div className="brand-row">
+            <span className="brand-mark">NK</span>
+          </div>
           <h1>Nettikone Lead Desk</h1>
           <p>
-            Scraped machinery listings, WhatsApp outreach state, and callbacks
-            for sellers who are still open to a deal.
+            Machinery listings are scraped, matched to seller phones, and staged
+            for careful WhatsApp outreach before the human team steps in.
           </p>
+          <div className="hero-meta">
+            <span>Source: Nettikone</span>
+            <span>Client: nordkone</span>
+            <span>{listings.length} rows loaded</span>
+          </div>
         </div>
-        <button onClick={load} disabled={loading}>
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div className="hero-action">
+          <button onClick={load} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Refresh desk'}
+          </button>
+        </div>
       </header>
 
       {error ? <div className="error">{error}</div> : null}
 
       <section className="cards">
-        {cards.map(([label, value]) => (
-          <article className="card" key={label}>
+        {cards.map(({ label, value, hint, tone }) => (
+          <article className={`card ${tone}`} key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
+            <small>{hint}</small>
           </article>
         ))}
       </section>
 
       <section className="toolbar">
-        <select value={status} onChange={(event) => setStatus(event.target.value)}>
-          {STATUS_OPTIONS.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onKeyDown={(event) => event.key === 'Enter' && load()}
-          placeholder="Search title, phone, seller, Nettikone ID"
-        />
+        <label>
+          <span>Status</span>
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            {STATUS_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="search-field">
+          <span>Search leads</span>
+          <input
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && load()}
+            placeholder="Machine, phone, seller, Nettikone ID"
+          />
+        </label>
         <button onClick={load}>Search</button>
       </section>
 
       <section className="grid">
         <div className="panel table-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Lead queue</p>
+              <h2>Eligible machinery listings</h2>
+            </div>
+            <span>{listings.length} visible</span>
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Machine</th>
                 <th>Price</th>
                 <th>Phone</th>
+                <th>Source</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -125,12 +183,20 @@ function App() {
                 >
                   <td>
                     <strong>{listing.machine_title}</strong>
-                    <small>{listing.nettikone_id} · Seller {listing.prospect_id || '-'} · {listing.location || 'No location'}</small>
+                    <small>{listing.nettikone_id} · {listing.location || 'No location'}</small>
                   </td>
-                  <td>{listing.price_text || '-'}</td>
+                  <td>
+                    <strong className="price">{listing.price_text || '-'}</strong>
+                    <small>{listing.model_year || 'Year unknown'}</small>
+                  </td>
                   <td>
                     <span>{listing.normalized_phone || '-'}</span>
-                    <small>{phoneSourceLabel(listing.phone_source)}</small>
+                    <small>Seller {listing.prospect_id || '-'}</small>
+                  </td>
+                  <td>
+                    <span className={`source-badge ${listing.phone_source || 'missing'}`}>
+                      {phoneSourceLabel(listing.phone_source)}
+                    </span>
                   </td>
                   <td>
                     <span className={`pill ${listing.status}`}>{statusLabel(listing.status)}</span>
@@ -155,30 +221,36 @@ function App() {
                 <div>
                   <p className="eyebrow">Listing {selected.nettikone_id}</p>
                   <h2>{selected.machine_title}</h2>
+                  <div className="detail-tags">
+                    <span>{selected.price_text || 'No price'}</span>
+                    <span>{selected.location || 'No location'}</span>
+                    <span>{phoneSourceLabel(selected.phone_source)}</span>
+                  </div>
                 </div>
-                <a href={selected.listing_url} target="_blank" rel="noreferrer">
+                <a className="open-link" href={selected.listing_url} target="_blank" rel="noreferrer">
                   Open
                 </a>
               </div>
-              <dl>
-                <dt>Phone</dt>
-                <dd>{selected.normalized_phone || 'Missing'}</dd>
-                <dt>Phone source</dt>
-                <dd>{phoneSourceLabel(selected.phone_source)}</dd>
-                <dt>Seller prospect</dt>
-                <dd>{selected.prospect_id || '-'}</dd>
-                <dt>Seller</dt>
-                <dd>{selected.seller_name || '-'}</dd>
-                <dt>Location</dt>
-                <dd>{selected.location || '-'}</dd>
-                <dt>Price</dt>
-                <dd>{selected.price_text || '-'}</dd>
-              </dl>
-              <div className="message">
-                Moikka! Sulla oli Nettikoneessa {selected.machine_title} myynnissä.
-                Onko se edelleen kaupan?
+              <div className="lead-packet">
+                <dl>
+                  <dt>Phone</dt>
+                  <dd>{selected.normalized_phone || 'Missing'}</dd>
+                  <dt>Seller prospect</dt>
+                  <dd>{selected.prospect_id || '-'}</dd>
+                  <dt>Model year</dt>
+                  <dd>{selected.model_year || '-'}</dd>
+                  <dt>Registration</dt>
+                  <dd>{selected.registration_number || '-'}</dd>
+                </dl>
               </div>
-              <p className="description">{selected.description || 'No description stored.'}</p>
+              <div className="message-card">
+                <p className="eyebrow">Outbound preview</p>
+                <div className="message">{selectedMessage}</div>
+              </div>
+              <div className="description-card">
+                <p className="eyebrow">Listing notes</p>
+                <p className="description">{selected.description || 'No description stored.'}</p>
+              </div>
             </>
           ) : (
             <p className="empty">Select a listing.</p>

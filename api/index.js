@@ -52,14 +52,14 @@ export function createApp() {
 }
 
 function optionalApiKey(req, res, next) {
-  const expected = process.env.API_KEY;
+  const expectedKeys = [process.env.API_KEY, process.env.VITE_API_KEY].filter(Boolean);
   const cronSecret = process.env.CRON_SECRET;
-  if (!expected && !cronSecret) return next();
+  if (!expectedKeys.length && !cronSecret) return next();
 
   const actual = req.get('x-api-key');
   const authorization = req.get('authorization');
   const cronAuthorized = cronSecret && authorization === `Bearer ${cronSecret}`;
-  const apiAuthorized = expected && actual === expected;
+  const apiAuthorized = expectedKeys.includes(actual);
 
   if (!apiAuthorized && !cronAuthorized) {
     return res.status(401).json({ error: 'Invalid API key' });
