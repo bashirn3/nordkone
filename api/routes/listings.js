@@ -100,6 +100,75 @@ router.get('/interested', async (_req, res) => {
   res.json({ listings: (data || []).map(listingRowToResponse) });
 });
 
+router.get('/conversations', async (req, res) => {
+  const supabase = createSupabase();
+  const limit = clamp(Number(req.query.limit || 30), 1, 100);
+
+  const { data: sessions, error: sessionError } = await supabase
+    .from('campaign_outbound_sessions')
+    .select('*')
+    .eq('client_key', CLIENT_KEY)
+    .eq('source_system', SOURCE_SYSTEM)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (sessionError) throw sessionError;
+
+  const sessionRows = sessions || [];
+  const sessionIds = sessionRows.map((session) => session.id).filter(Boolean);
+  const sourceIds = [...new Set(sessionRows.map((session) => session.source_customer_id).filter(Boolean))];
+
+  const [inboundResult, listingResult] = await Promise.all([
+    sessionIds.length
+      ? supabase
+          .from('campaign_inbound_events')
+          .select('*')
+          .eq('client_key', CLIENT_KEY)
+          .in('session_id', sessionIds)
+          .order('created_at', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    sourceIds.length
+      ? supabase
+          .from('nordkone_listings')
+          .select('*')
+          .eq('client_key', CLIENT_KEY)
+          .in('nettikone_id', sourceIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (inboundResult.error) throw inboundResult.error;
+  if (listingResult.error) throw listingResult.error;
+
+  const inboundBySession = groupBy(inboundResult.data || [], 'session_id');
+  const listingByNettikoneId = new Map(
+    (listingResult.data || []).map((listing) => [listing.nettikone_id, listingRowToResponse(listing)])
+  );
+
+  const conversations = sessionRows.map((session) => {
+    const listing = listingByNettikoneId.get(session.source_customer_id) || listingFromSession(session);
+    const inboundEvents = inboundBySession.get(session.id) || [];
+    const messages = buildConversationMessages(session, inboundEvents);
+
+    return {
+      session_id: session.id,
+      prospect_id: session.prospect_id,
+      number: session.number,
+      status: session.status,
+      interest_status: session.interest_status,
+      inbound_count: session.inbound_count || 0,
+      outbound_count: session.outbound_count || 0,
+      last_inbound_at: session.last_inbound_at,
+      last_outbound_at: session.last_outbound_at,
+      updated_at: session.updated_at,
+      listing,
+      messages,
+      latest_message: messages[messages.length - 1] || null,
+    };
+  });
+
+  res.json({ conversations });
+});
+
 router.get('/outbound/candidates', async (req, res) => {
   const supabase = createSupabase();
   const limit = clamp(Number(req.query.limit || 10), 1, 50);
@@ -345,6 +414,57 @@ function listingFromSession(session = {}) {
     interest_status: session.interest_status,
     raw_data: rawData,
   };
+}
+
+function buildConversationMessages(session = {}, inboundEvents = []) {
+  const messages = [];
+
+  if (session.message) {
+    messages.push({
+      id: `session-${session.id}-outbound`,
+      direction: 'outbound',
+      sender: 'NordKone',
+      message: session.message,
+      at: session.first_outbound_at || session.last_outbound_at || session.created_at,
+      meta: 'WF-1',
+    });
+  }
+
+  for (const event of inboundEvents) {
+    messages.push({
+      id: `inbound-${event.id}`,
+      direction: 'inbound',
+      sender: 'Seller',
+      message: event.message,
+      at: event.received_at || event.created_at,
+      classification: event.classification,
+      needs_human: event.needs_human,
+    });
+
+    const replyMessage = event.raw_event?.reply_message || event.raw_event?.agent_reply_message;
+    if (replyMessage) {
+      messages.push({
+        id: `reply-${event.id}`,
+        direction: 'outbound',
+        sender: 'NordKone',
+        message: replyMessage,
+        at: event.received_at || event.created_at,
+        meta: 'WF-2',
+      });
+    }
+  }
+
+  return messages.sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0));
+}
+
+function groupBy(rows = [], key) {
+  const groups = new Map();
+  for (const row of rows) {
+    const value = row[key];
+    if (!groups.has(value)) groups.set(value, []);
+    groups.get(value).push(row);
+  }
+  return groups;
 }
 
 async function loadListing(supabase, { listing_id, nettikone_id }) {

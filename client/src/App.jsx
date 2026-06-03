@@ -18,9 +18,11 @@ const STATUS_OPTIONS = [
 function App() {
   const [summary, setSummary] = useState(null);
   const [listings, setListings] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null);
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [settings, setSettings] = useState(null);
   const [dailyCapDraft, setDailyCapDraft] = useState('20');
   const [scrapeResult, setScrapeResult] = useState(null);
@@ -35,10 +37,11 @@ function App() {
     try {
       const params = new URLSearchParams({ status, limit: '100' });
       if (q.trim()) params.set('q', q.trim());
-      const [summaryData, listingData, settingsData] = await Promise.all([
+      const [summaryData, listingData, settingsData, conversationData] = await Promise.all([
         apiGet('/api/summary'),
         apiGet(`/api/listings?${params.toString()}`),
         apiGet('/api/settings'),
+        apiGet('/api/conversations?limit=50'),
       ]);
 
       setSummary(summaryData);
@@ -46,6 +49,12 @@ function App() {
       setSelected((current) => current || listingData.listings?.[0] || null);
       setSettings(settingsData.settings || null);
       setDailyCapDraft(String(settingsData.settings?.daily_cap ?? 20));
+      setConversations(conversationData.conversations || []);
+      setSelectedConversationId((current) => {
+        const rows = conversationData.conversations || [];
+        if (current && rows.some((conversation) => conversation.session_id === current)) return current;
+        return rows[0]?.session_id || null;
+      });
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -97,6 +106,14 @@ function App() {
       },
     ],
     [summary]
+  );
+
+  const selectedConversation = useMemo(
+    () =>
+      conversations.find((conversation) => conversation.session_id === selectedConversationId) ||
+      conversations[0] ||
+      null,
+    [conversations, selectedConversationId]
   );
 
   const selectedMessage = selected
@@ -232,6 +249,80 @@ function App() {
             </button>
           </div>
         </article>
+      </section>
+
+      <section className="panel chat-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Chats</p>
+            <h2>Seller conversations</h2>
+          </div>
+          <span>{conversations.length} sessions</span>
+        </div>
+        <div className="chat-layout">
+          <div className="conversation-list">
+            {conversations.map((conversation) => (
+              <button
+                className={`conversation-row ${
+                  selectedConversation?.session_id === conversation.session_id ? 'active' : ''
+                }`}
+                key={conversation.session_id}
+                onClick={() => setSelectedConversationId(conversation.session_id)}
+              >
+                <strong>{conversation.listing?.machine_title || conversation.number}</strong>
+                <span>{conversation.listing?.nettikone_id || conversation.number}</span>
+                <small>{conversation.latest_message?.message || 'No messages yet'}</small>
+                <em>{statusLabel(conversation.interest_status || conversation.status)}</em>
+              </button>
+            ))}
+            {!conversations.length && !loading ? (
+              <p className="empty conversation-empty">No conversations yet.</p>
+            ) : null}
+          </div>
+
+          <div className="thread">
+            {selectedConversation ? (
+              <>
+                <div className="thread-header">
+                  <div>
+                    <p className="eyebrow">Session {selectedConversation.session_id}</p>
+                    <h3>{selectedConversation.listing?.machine_title || selectedConversation.number}</h3>
+                    <span>{selectedConversation.number}</span>
+                  </div>
+                  {selectedConversation.listing?.listing_url ? (
+                    <a
+                      className="open-link"
+                      href={selectedConversation.listing.listing_url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Listing
+                    </a>
+                  ) : null}
+                </div>
+                <div className="messages">
+                  {selectedConversation.messages.map((message) => (
+                    <article className={`bubble ${message.direction}`} key={message.id}>
+                      <div className="bubble-meta">
+                        <span>{message.sender}</span>
+                        <time>{formatTime(message.at)}</time>
+                      </div>
+                      <p>{message.message}</p>
+                      {message.classification ? (
+                        <small>{statusLabel(message.classification)}</small>
+                      ) : null}
+                    </article>
+                  ))}
+                  {!selectedConversation.messages.length ? (
+                    <p className="empty">No stored messages for this session.</p>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <p className="empty">Select a conversation.</p>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="toolbar">
@@ -371,6 +462,16 @@ function phoneSourceLabel(value) {
 
 function statusLabel(value) {
   return String(value || 'eligible').replace(/_/g, ' ');
+}
+
+function formatTime(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
+  }).format(new Date(value));
 }
 
 createRoot(document.getElementById('root')).render(<App />);
