@@ -10,10 +10,14 @@ export function extractPhoneCandidates(text = '') {
 export function normalizePhone(value) {
   if (!value) return null;
 
-  const cleaned = String(value)
+  let cleaned = String(value)
     .replace(/\b(?:puh|tel|phone|gsm|whatsapp|wa)\b[:.]?/gi, '')
     .replace(/[^\d+]/g, '')
     .replace(/^00358/, '+358');
+
+  if (!cleaned.startsWith('+') && /^(234|358|44)\d{6,14}$/.test(cleaned)) {
+    cleaned = `+${cleaned}`;
+  }
 
   const phone = parsePhoneNumberFromString(cleaned, 'FI');
   if (!phone || !phone.isValid()) return null;
