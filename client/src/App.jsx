@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { apiGet } from './lib/api.js';
+import { apiGet, apiSend } from './lib/api.js';
 import './styles.css';
 
 const STATUS_OPTIONS = [
@@ -21,8 +21,13 @@ function App() {
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [dailyCapDraft, setDailyCapDraft] = useState('20');
+  const [scrapeResult, setScrapeResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [scraping, setScraping] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -30,14 +35,17 @@ function App() {
     try {
       const params = new URLSearchParams({ status, limit: '100' });
       if (q.trim()) params.set('q', q.trim());
-      const [summaryData, listingData] = await Promise.all([
+      const [summaryData, listingData, settingsData] = await Promise.all([
         apiGet('/api/summary'),
         apiGet(`/api/listings?${params.toString()}`),
+        apiGet('/api/settings'),
       ]);
 
       setSummary(summaryData);
       setListings(listingData.listings || []);
       setSelected((current) => current || listingData.listings?.[0] || null);
+      setSettings(settingsData.settings || null);
+      setDailyCapDraft(String(settingsData.settings?.daily_cap ?? 20));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -95,6 +103,45 @@ function App() {
     ? `Moikka! Sulla oli Nettikoneessa ${selected.machine_title} myynnissä. Onko se edelleen kaupan?`
     : '';
 
+  async function updateOutboundSettings(nextSettings) {
+    setSavingSettings(true);
+    setError('');
+    try {
+      await apiSend('/api/settings', {
+        method: 'PUT',
+        body: {
+          settings: nextSettings,
+        },
+      });
+      await load();
+    } catch (settingsError) {
+      setError(settingsError.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function saveDailyCap() {
+    await updateOutboundSettings({
+      daily_cap: Math.max(Number(dailyCapDraft) || 0, 0),
+    });
+  }
+
+  async function runManualScrape() {
+    setScraping(true);
+    setScrapeResult(null);
+    setError('');
+    try {
+      const result = await apiSend('/api/scrape/run?limit=10&pages=1', { method: 'POST' });
+      setScrapeResult(result);
+      await load();
+    } catch (scrapeError) {
+      setError(scrapeError.message);
+    } finally {
+      setScraping(false);
+    }
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -130,6 +177,61 @@ function App() {
             <small>{hint}</small>
           </article>
         ))}
+      </section>
+
+      <section className="ops-grid">
+        <article className={`panel control-panel ${settings?.outbound_enabled ? 'enabled' : ''}`}>
+          <div>
+            <p className="eyebrow">WF-1 Control</p>
+            <h2>{settings?.outbound_enabled ? 'Outbound active' : 'Outbound paused'}</h2>
+            <p>
+              WF-1 only receives candidates when this is active and the daily cap
+              still has room.
+            </p>
+          </div>
+          <div className="control-actions">
+            <button
+              className={settings?.outbound_enabled ? 'danger' : 'success'}
+              disabled={savingSettings || !settings}
+              onClick={() => updateOutboundSettings({ outbound_enabled: !settings?.outbound_enabled })}
+            >
+              {settings?.outbound_enabled ? 'Pause WF-1' : 'Activate WF-1'}
+            </button>
+            <label>
+              <span>Daily cap</span>
+              <input
+                min="0"
+                type="number"
+                value={dailyCapDraft}
+                onChange={(event) => setDailyCapDraft(event.target.value)}
+              />
+            </label>
+            <button disabled={savingSettings || !settings} onClick={saveDailyCap}>
+              Save cap
+            </button>
+          </div>
+        </article>
+
+        <article className="panel control-panel">
+          <div>
+            <p className="eyebrow">Scraper</p>
+            <h2>Manual Vercel check</h2>
+            <p>
+              Runs the same protected scrape path as the cron with a conservative
+              one-page, ten-listing sample.
+            </p>
+            {scrapeResult ? (
+              <code className="scrape-result">
+                {JSON.stringify(scrapeResult.stats || scrapeResult)}
+              </code>
+            ) : null}
+          </div>
+          <div className="control-actions compact">
+            <button disabled={scraping} onClick={runManualScrape}>
+              {scraping ? 'Scraping...' : 'Run scrape now'}
+            </button>
+          </div>
+        </article>
       </section>
 
       <section className="toolbar">
@@ -205,7 +307,7 @@ function App() {
               ))}
               {!listings.length && !loading ? (
                 <tr>
-                  <td colSpan="4" className="empty">
+                  <td colSpan="5" className="empty">
                     No listings found.
                   </td>
                 </tr>

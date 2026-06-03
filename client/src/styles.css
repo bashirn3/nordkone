@@ -65,6 +65,14 @@ button:disabled {
   transform: none;
 }
 
+button.success {
+  background: #315b2f;
+}
+
+button.danger {
+  background: #7f3829;
+}
+
 .shell {
   margin: 0 auto;
   padding: 28px 0 38px;
@@ -288,6 +296,87 @@ button:disabled {
   grid-template-columns: 220px 1fr auto;
   margin-bottom: 14px;
   padding: 12px;
+}
+
+.ops-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+  margin-bottom: 14px;
+}
+
+.control-panel {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 18px;
+}
+
+.control-panel.enabled {
+  background:
+    linear-gradient(135deg, rgba(226, 239, 214, 0.9), rgba(255, 252, 244, 0.86)),
+    #f7f2e6;
+}
+
+.control-panel h2 {
+  color: #242b20;
+  font-size: 1rem;
+  letter-spacing: -0.04em;
+  margin: 6px 0;
+}
+
+.control-panel p {
+  color: #626a5a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  max-width: 620px;
+}
+
+.control-actions {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+}
+
+.control-actions.compact {
+  align-items: stretch;
+}
+
+.control-actions label {
+  display: grid;
+  gap: 6px;
+  min-width: 98px;
+}
+
+.control-actions label span {
+  color: #6b705f;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.control-actions input {
+  background: #fffdf8;
+  border: 1px solid rgba(55, 63, 47, 0.16);
+  border-radius: 13px;
+  color: #22281f;
+  font-size: 0.84rem;
+  max-width: 120px;
+  outline: none;
+  padding: 0.78rem 0.85rem;
+}
+
+.scrape-result {
+  background: rgba(32, 38, 29, 0.08);
+  border-radius: 12px;
+  color: #2c3328;
+  display: inline-block;
+  font-size: 0.72rem;
+  margin-top: 10px;
+  padding: 0.62rem 0.72rem;
 }
 
 .toolbar label {
@@ -597,6 +686,11 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .ops-grid,
+  .control-panel {
+    grid-template-columns: 1fr;
+  }
+
   .detail {
     position: static;
   }
@@ -610,6 +704,11 @@ dd {
   .hero,
   .toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .control-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .hero-action {

@@ -12,22 +12,32 @@
           ]
         }
       },
-      "id": "cron",
-      "name": "Business-hours Cron",
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [0, 0]
     },
     {
       "parameters": {
+        "jsCode": "return [{\n  json: {\n    apiBaseUrl: 'https://YOUR-VERCEL-URL',\n    apiKey: 'PASTE_BRIDGE_API_KEY_HERE',\n    wasupSendUrl: 'https://wasup.northeurope.cloudapp.azure.com/api/send',\n    fromPhone: 'PASTE_WASUP_SENDER_PHONE_HERE',\n    // Fill this with your own phone for the first end-to-end test.\n    // Leave empty before launch so real seller numbers are used.\n    testRecipientPhone: '',\n    candidateLimit: 1\n  }\n}];"
+      },
+      "id": "workflow-config",
+      "name": "Workflow Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
         "method": "GET",
-        "url": "={{$env.NORDKONE_API_BASE_URL}}/api/outbound/candidates?limit=1",
+        "url": "={{ $('Workflow Config').first().json.apiBaseUrl + '/api/outbound/candidates?limit=' + $('Workflow Config').first().json.candidateLimit }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "X-API-Key",
-              "value": "={{$env.NORDKONE_API_KEY}}"
+              "value": "={{ $('Workflow Config').first().json.apiKey }}"
             }
           ]
         }
@@ -36,47 +46,69 @@
       "name": "Fetch Candidate",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [220, 0]
+      "position": [460, 0]
     },
     {
       "parameters": {
-        "url": "https://wasup.northeurope.cloudapp.azure.com/api/send",
+        "jsCode": "const config = $('Workflow Config').first().json;\nconst candidate = $json.candidates?.[0];\nif (!candidate) {\n  return [];\n}\nconst testRecipientPhone = String(config.testRecipientPhone || '').trim();\nconst toPhone = testRecipientPhone || candidate.normalized_phone;\nreturn [{\n  json: {\n    ...candidate,\n    config,\n    is_test_send: Boolean(testRecipientPhone),\n    original_seller_phone: candidate.normalized_phone,\n    send_to_phone: toPhone,\n    wasupPayload: {\n      from_phone: config.fromPhone,\n      to_phone: toPhone,\n      message: candidate.outbound_message\n    }\n  }\n}];"
+      },
+      "id": "prepare-message",
+      "name": "Prepare Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.config.wasupSendUrl }}",
         "sendBody": true,
         "contentType": "json",
-        "jsonBody": "={\"from_phone\": $env.NORDKONE_FROM_PHONE, \"to_phone\": $json.candidates[0].normalized_phone, \"message\": $json.candidates[0].outbound_message}"
+        "jsonBody": "={{ $json.wasupPayload }}"
       },
       "id": "send-whatsapp",
       "name": "Send WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 0]
+      "position": [940, 0]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.NORDKONE_API_BASE_URL}}/api/outbound/sent",
+        "url": "={{ $('Workflow Config').first().json.apiBaseUrl + '/api/outbound/sent' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "X-API-Key",
-              "value": "={{$env.NORDKONE_API_KEY}}"
+              "value": "={{ $('Workflow Config').first().json.apiKey }}"
             }
           ]
         },
         "sendBody": true,
         "contentType": "json",
-        "jsonBody": "={\"nettikone_id\": $('Fetch Candidate').item.json.candidates[0].nettikone_id, \"number\": $('Fetch Candidate').item.json.candidates[0].normalized_phone, \"message\": $('Fetch Candidate').item.json.candidates[0].outbound_message, \"provider\": \"wasup\", \"provider_message_id\": $json.message_id || $json.id || null, \"raw_data\": $json}"
+        "jsonBody": "={{ {\n  nettikone_id: $('Prepare Message').first().json.nettikone_id,\n  listing_id: $('Prepare Message').first().json.id,\n  number: $('Prepare Message').first().json.send_to_phone,\n  message: $('Prepare Message').first().json.outbound_message,\n  provider: $('Prepare Message').first().json.is_test_send ? 'wasup_test' : 'wasup',\n  provider_message_id: $json.message_id || $json.id || null,\n  raw_data: {\n    ...$json,\n    is_test_send: $('Prepare Message').first().json.is_test_send,\n    original_seller_phone: $('Prepare Message').first().json.original_seller_phone,\n    send_to_phone: $('Prepare Message').first().json.send_to_phone\n  }\n} }}"
       },
       "id": "record-sent",
       "name": "Record Sent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0]
+      "position": [1180, 0]
     }
   ],
   "connections": {
-    "Business-hours Cron": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Config": {
       "main": [
         [
           {
@@ -88,6 +120,17 @@
       ]
     },
     "Fetch Candidate": {
+      "main": [
+        [
+          {
+            "node": "Prepare Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Message": {
       "main": [
         [
           {

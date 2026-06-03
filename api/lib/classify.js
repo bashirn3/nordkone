@@ -1,16 +1,21 @@
 const INTERESTED_RE = /\b(kylla|kyllä|joo|juu|on kaupan|edelleen|soita|tarjous|kiinnostaa|voitte soittaa)\b/i;
 const SOLD_RE = /\b(myyty|meni jo|ei ole enää|ei ole enaa|kaupat tehty)\b/i;
-const NOT_INTERESTED_RE = /\b(ei kiinnosta|en myy|älä|ala laita|lopeta|poista|ei viesteja|ei viestejä)\b/i;
+const OPTED_OUT_RE = /\b(älä|ala laita|lopeta|poista|ei viesteja|ei viestejä|stop)\b/i;
+const NOT_INTERESTED_RE = /\b(ei kiinnosta|en myy|ei tarvetta|ei kiitos)\b/i;
 
 export function classifyInbound(message = '') {
   const text = String(message).toLowerCase();
 
-  if (NOT_INTERESTED_RE.test(text)) {
+  if (OPTED_OUT_RE.test(text)) {
     return { classification: 'opted_out', needs_human: false };
   }
 
   if (SOLD_RE.test(text)) {
     return { classification: 'sold', needs_human: false };
+  }
+
+  if (NOT_INTERESTED_RE.test(text)) {
+    return { classification: 'not_interested', needs_human: false };
   }
 
   if (INTERESTED_RE.test(text)) {

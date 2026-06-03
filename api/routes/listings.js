@@ -103,6 +103,36 @@ router.get('/interested', async (_req, res) => {
 router.get('/outbound/candidates', async (req, res) => {
   const supabase = createSupabase();
   const limit = clamp(Number(req.query.limit || 10), 1, 50);
+  const config = await loadCampaignConfig(supabase);
+  const dailyCap = clamp(Number(config?.daily_cap || 0), 0, 500);
+  const sentToday = await countSessions(supabase, { sentSince: startOfTodayIso() });
+
+  if (!config?.outbound_enabled) {
+    return res.json({
+      candidates: [],
+      control: {
+        outbound_enabled: false,
+        daily_cap: dailyCap,
+        sent_today: sentToday,
+        remaining_today: 0,
+        reason: 'outbound_disabled',
+      },
+    });
+  }
+
+  const remainingToday = Math.max(dailyCap - sentToday, 0);
+  if (remainingToday <= 0) {
+    return res.json({
+      candidates: [],
+      control: {
+        outbound_enabled: true,
+        daily_cap: dailyCap,
+        sent_today: sentToday,
+        remaining_today: 0,
+        reason: 'daily_cap_reached',
+      },
+    });
+  }
 
   const { data, error } = await supabase
     .from('nordkone_listings')
@@ -111,11 +141,18 @@ router.get('/outbound/candidates', async (req, res) => {
     .eq('status', 'eligible')
     .not('normalized_phone', 'is', null)
     .order('first_seen_at', { ascending: true })
-    .limit(limit);
+    .limit(Math.min(limit, remainingToday));
 
   if (error) throw error;
 
   res.json({
+    control: {
+      outbound_enabled: true,
+      daily_cap: dailyCap,
+      sent_today: sentToday,
+      remaining_today: remainingToday,
+      reason: 'ok',
+    },
     candidates: (data || []).map((row) => {
       const listing = listingRowToResponse(row);
       return {
@@ -160,6 +197,7 @@ router.post('/outbound/sent', async (req, res) => {
     message: outboundMessage,
     provider,
     provider_message_id: provider_message_id || null,
+    first_outbound_at: existingSession?.first_outbound_at || new Date().toISOString(),
     last_outbound_at: new Date().toISOString(),
     status: 'contacted',
     raw_data: {
@@ -295,7 +333,7 @@ async function countListings(supabase, { status, hasPhone, phoneSource } = {}) {
   return count || 0;
 }
 
-async function countSessions(supabase, { replied, interestStatus } = {}) {
+async function countSessions(supabase, { replied, interestStatus, sentSince } = {}) {
   let query = supabase
     .from('campaign_outbound_sessions')
     .select('id', { count: 'exact', head: true })
@@ -304,10 +342,27 @@ async function countSessions(supabase, { replied, interestStatus } = {}) {
 
   if (replied) query = query.not('last_inbound_at', 'is', null);
   if (interestStatus) query = query.eq('interest_status', interestStatus);
+  if (sentSince) query = query.gte('last_outbound_at', sentSince);
 
   const { count, error } = await query;
   if (error) throw error;
   return count || 0;
+}
+
+async function loadCampaignConfig(supabase) {
+  const { data, error } = await supabase
+    .from('campaign_client_config')
+    .select('outbound_enabled,daily_cap,campaign_name')
+    .eq('client_key', CLIENT_KEY)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || { outbound_enabled: false, daily_cap: 0, campaign_name: CAMPAIGN_NAME };
+}
+
+function startOfTodayIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 }
 
 function applyStatusFilter(query, status) {

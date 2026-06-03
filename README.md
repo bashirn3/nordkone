@@ -115,6 +115,11 @@ The workflows are template files in this repo, not imported into n8n yet:
 Import them into n8n manually and keep them inactive until one manual outbound
 test succeeds.
 
+WF-1 is guarded by `campaign_client_config.outbound_enabled` and `daily_cap`.
+Use the dashboard controls to activate/pause outbound and adjust the cap. For the
+first test, fill `testRecipientPhone` in the WF-1 `Workflow Config` node with
+your own number; clear it before launch so real seller numbers are used.
+
 ## Compliance Note
 
 Nettikone's `robots.txt` allows normal listing paths but includes a rights
