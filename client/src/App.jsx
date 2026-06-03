@@ -19,6 +19,7 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [listings, setListings] = useState([]);
   const [conversations, setConversations] = useState([]);
+  const [activeTab, setActiveTab] = useState('leads');
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null);
@@ -251,56 +252,106 @@ function App() {
         </article>
       </section>
 
-      <section className="panel chat-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Chats</p>
-            <h2>Seller conversations</h2>
-          </div>
-          <span>{conversations.length} sessions</span>
-        </div>
-        <div className="chat-layout">
-          <div className="conversation-list">
-            {conversations.map((conversation) => (
-              <button
-                className={`conversation-row ${
-                  selectedConversation?.session_id === conversation.session_id ? 'active' : ''
-                }`}
-                key={conversation.session_id}
-                onClick={() => setSelectedConversationId(conversation.session_id)}
-              >
-                <strong>{conversation.listing?.machine_title || conversation.number}</strong>
-                <span>{conversation.listing?.nettikone_id || conversation.number}</span>
-                <small>{conversation.latest_message?.message || 'No messages yet'}</small>
-                <em>{statusLabel(conversation.interest_status || conversation.status)}</em>
-              </button>
-            ))}
-            {!conversations.length && !loading ? (
-              <p className="empty conversation-empty">No conversations yet.</p>
-            ) : null}
+      <section className="tabs">
+        <button
+          className={activeTab === 'leads' ? 'active' : ''}
+          onClick={() => setActiveTab('leads')}
+        >
+          Leads
+        </button>
+        <button
+          className={activeTab === 'listings' ? 'active' : ''}
+          onClick={() => setActiveTab('listings')}
+        >
+          Listings
+        </button>
+      </section>
+
+      {activeTab === 'leads' ? (
+        <section className="grid leads-grid">
+          <div className="panel table-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Lead inbox</p>
+                <h2>Seller conversations</h2>
+              </div>
+              <span>{conversations.length} sessions</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Seller / Machine</th>
+                  <th>Status</th>
+                  <th>Last message</th>
+                  <th>Chat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversations.map((conversation) => (
+                  <tr
+                    key={conversation.session_id}
+                    className={
+                      selectedConversation?.session_id === conversation.session_id ? 'selected' : ''
+                    }
+                    onClick={() => setSelectedConversationId(conversation.session_id)}
+                  >
+                    <td>
+                      <strong>{conversation.listing?.machine_title || conversation.number}</strong>
+                      <small>
+                        {conversation.number} · {conversation.listing?.nettikone_id || 'No listing'}
+                      </small>
+                    </td>
+                    <td>
+                      <span className={`pill ${conversation.interest_status || conversation.status}`}>
+                        {statusLabel(conversation.interest_status || conversation.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <span>{conversation.latest_message?.message || 'No messages yet'}</span>
+                      <small>{formatTime(conversation.latest_message?.at || conversation.updated_at)}</small>
+                    </td>
+                    <td>
+                      <button className="small-action" type="button">
+                        View chat
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!conversations.length && !loading ? (
+                  <tr>
+                    <td colSpan="4" className="empty">
+                      No conversations yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
 
-          <div className="thread">
+          <aside className="panel detail lead-detail">
             {selectedConversation ? (
               <>
-                <div className="thread-header">
+                <div className="detail-header">
                   <div>
-                    <p className="eyebrow">Session {selectedConversation.session_id}</p>
-                    <h3>{selectedConversation.listing?.machine_title || selectedConversation.number}</h3>
-                    <span>{selectedConversation.number}</span>
+                    <p className="eyebrow">Chat session {selectedConversation.session_id}</p>
+                    <h2>{selectedConversation.listing?.machine_title || selectedConversation.number}</h2>
+                    <div className="detail-tags">
+                      <span>{selectedConversation.number}</span>
+                      <span>{statusLabel(selectedConversation.interest_status || selectedConversation.status)}</span>
+                    </div>
                   </div>
                   {selectedConversation.listing?.listing_url ? (
                     <a
                       className="open-link"
                       href={selectedConversation.listing.listing_url}
-                      rel="noreferrer"
                       target="_blank"
+                      rel="noreferrer"
                     >
                       Listing
                     </a>
                   ) : null}
                 </div>
-                <div className="messages">
+                <div className="messages drawer-messages">
                   {selectedConversation.messages.map((message) => (
                     <article className={`bubble ${message.direction}`} key={message.id}>
                       <div className="bubble-meta">
@@ -319,137 +370,139 @@ function App() {
                 </div>
               </>
             ) : (
-              <p className="empty">Select a conversation.</p>
+              <p className="empty">Select a lead to view chat.</p>
             )}
-          </div>
-        </div>
-      </section>
+          </aside>
+        </section>
+      ) : (
+        <>
+          <section className="toolbar">
+            <label>
+              <span>Status</span>
+              <select value={status} onChange={(event) => setStatus(event.target.value)}>
+                {STATUS_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="search-field">
+              <span>Search listings</span>
+              <input
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && load()}
+                placeholder="Machine, phone, seller, Nettikone ID"
+              />
+            </label>
+            <button onClick={load}>Search</button>
+          </section>
 
-      <section className="toolbar">
-        <label>
-          <span>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            {STATUS_OPTIONS.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="search-field">
-          <span>Search leads</span>
-          <input
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && load()}
-            placeholder="Machine, phone, seller, Nettikone ID"
-          />
-        </label>
-        <button onClick={load}>Search</button>
-      </section>
-
-      <section className="grid">
-        <div className="panel table-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Lead queue</p>
-              <h2>Eligible machinery listings</h2>
-            </div>
-            <span>{listings.length} visible</span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Machine</th>
-                <th>Price</th>
-                <th>Phone</th>
-                <th>Source</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listings.map((listing) => (
-                <tr
-                  key={listing.id}
-                  className={selected?.id === listing.id ? 'selected' : ''}
-                  onClick={() => setSelected(listing)}
-                >
-                  <td>
-                    <strong>{listing.machine_title}</strong>
-                    <small>{listing.nettikone_id} · {listing.location || 'No location'}</small>
-                  </td>
-                  <td>
-                    <strong className="price">{listing.price_text || '-'}</strong>
-                    <small>{listing.model_year || 'Year unknown'}</small>
-                  </td>
-                  <td>
-                    <span>{listing.normalized_phone || '-'}</span>
-                    <small>Seller {listing.prospect_id || '-'}</small>
-                  </td>
-                  <td>
-                    <span className={`source-badge ${listing.phone_source || 'missing'}`}>
-                      {phoneSourceLabel(listing.phone_source)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`pill ${listing.status}`}>{statusLabel(listing.status)}</span>
-                  </td>
-                </tr>
-              ))}
-              {!listings.length && !loading ? (
-                <tr>
-                  <td colSpan="5" className="empty">
-                    No listings found.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        <aside className="panel detail">
-          {selected ? (
-            <>
-              <div className="detail-header">
+          <section className="grid">
+            <div className="panel table-panel">
+              <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Listing {selected.nettikone_id}</p>
-                  <h2>{selected.machine_title}</h2>
-                  <div className="detail-tags">
-                    <span>{selected.price_text || 'No price'}</span>
-                    <span>{selected.location || 'No location'}</span>
-                    <span>{phoneSourceLabel(selected.phone_source)}</span>
-                  </div>
+                  <p className="eyebrow">Listing queue</p>
+                  <h2>Scraped machinery listings</h2>
                 </div>
-                <a className="open-link" href={selected.listing_url} target="_blank" rel="noreferrer">
-                  Open
-                </a>
+                <span>{listings.length} visible</span>
               </div>
-              <div className="lead-packet">
-                <dl>
-                  <dt>Phone</dt>
-                  <dd>{selected.normalized_phone || 'Missing'}</dd>
-                  <dt>Seller prospect</dt>
-                  <dd>{selected.prospect_id || '-'}</dd>
-                  <dt>Model year</dt>
-                  <dd>{selected.model_year || '-'}</dd>
-                  <dt>Registration</dt>
-                  <dd>{selected.registration_number || '-'}</dd>
-                </dl>
-              </div>
-              <div className="message-card">
-                <p className="eyebrow">Outbound preview</p>
-                <div className="message">{selectedMessage}</div>
-              </div>
-              <div className="description-card">
-                <p className="eyebrow">Listing notes</p>
-                <p className="description">{selected.description || 'No description stored.'}</p>
-              </div>
-            </>
-          ) : (
-            <p className="empty">Select a listing.</p>
-          )}
-        </aside>
-      </section>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Machine</th>
+                    <th>Price</th>
+                    <th>Phone</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listings.map((listing) => (
+                    <tr
+                      key={listing.id}
+                      className={selected?.id === listing.id ? 'selected' : ''}
+                      onClick={() => setSelected(listing)}
+                    >
+                      <td>
+                        <strong>{listing.machine_title}</strong>
+                        <small>{listing.nettikone_id} · {listing.location || 'No location'}</small>
+                      </td>
+                      <td>
+                        <strong className="price">{listing.price_text || '-'}</strong>
+                        <small>{listing.model_year || 'Year unknown'}</small>
+                      </td>
+                      <td>
+                        <span>{listing.normalized_phone || '-'}</span>
+                        <small>Seller {listing.prospect_id || '-'}</small>
+                      </td>
+                      <td>
+                        <span className={`source-badge ${listing.phone_source || 'missing'}`}>
+                          {phoneSourceLabel(listing.phone_source)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`pill ${listing.status}`}>{statusLabel(listing.status)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!listings.length && !loading ? (
+                    <tr>
+                      <td colSpan="5" className="empty">
+                        No listings found.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <aside className="panel detail">
+              {selected ? (
+                <>
+                  <div className="detail-header">
+                    <div>
+                      <p className="eyebrow">Listing {selected.nettikone_id}</p>
+                      <h2>{selected.machine_title}</h2>
+                      <div className="detail-tags">
+                        <span>{selected.price_text || 'No price'}</span>
+                        <span>{selected.location || 'No location'}</span>
+                        <span>{phoneSourceLabel(selected.phone_source)}</span>
+                      </div>
+                    </div>
+                    <a className="open-link" href={selected.listing_url} target="_blank" rel="noreferrer">
+                      Open
+                    </a>
+                  </div>
+                  <div className="lead-packet">
+                    <dl>
+                      <dt>Phone</dt>
+                      <dd>{selected.normalized_phone || 'Missing'}</dd>
+                      <dt>Seller prospect</dt>
+                      <dd>{selected.prospect_id || '-'}</dd>
+                      <dt>Model year</dt>
+                      <dd>{selected.model_year || '-'}</dd>
+                      <dt>Registration</dt>
+                      <dd>{selected.registration_number || '-'}</dd>
+                    </dl>
+                  </div>
+                  <div className="message-card">
+                    <p className="eyebrow">Outbound preview</p>
+                    <div className="message">{selectedMessage}</div>
+                  </div>
+                  <div className="description-card">
+                    <p className="eyebrow">Listing notes</p>
+                    <p className="description">{selected.description || 'No description stored.'}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="empty">Select a listing.</p>
+              )}
+            </aside>
+          </section>
+        </>
+      )}
     </main>
   );
 }

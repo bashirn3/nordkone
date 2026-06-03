@@ -298,6 +298,35 @@ button.danger {
   padding: 12px;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tabs button {
+  background: rgba(255, 252, 244, 0.72);
+  border-color: rgba(56, 64, 47, 0.14);
+  box-shadow: none;
+  color: #394033;
+  padding: 0.72rem 1rem;
+}
+
+.tabs button:hover,
+.tabs button.active {
+  background: #20261d;
+  color: #fff7e7;
+  transform: none;
+}
+
+.small-action {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 0.68rem;
+  padding: 0.48rem 0.68rem;
+  white-space: nowrap;
+}
+
 .chat-panel {
   margin-bottom: 14px;
 }
@@ -568,6 +597,10 @@ button.danger {
   grid-template-columns: minmax(0, 1.48fr) minmax(390px, 0.52fr);
 }
 
+.leads-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.8fr);
+}
+
 .panel {
   overflow: hidden;
 }
@@ -712,6 +745,10 @@ td small {
   top: 18px;
 }
 
+.lead-detail {
+  min-height: 520px;
+}
+
 .detail .eyebrow {
   color: #c9b16f;
 }
@@ -804,6 +841,28 @@ dd {
   overflow: auto;
 }
 
+.drawer-messages {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  max-height: 620px;
+  padding: 14px;
+}
+
+.detail .bubble {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.detail .bubble.inbound {
+  background: #fff7e7;
+  color: #20261d;
+}
+
+.detail .bubble.outbound {
+  background: #f3e4bb;
+  color: #20261d;
+}
+
 .error {
   background: #fff3f0;
   border-color: #f0b5a8;
@@ -833,7 +892,8 @@ dd {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .grid {
+  .grid,
+  .leads-grid {
     grid-template-columns: 1fr;
   }
 
