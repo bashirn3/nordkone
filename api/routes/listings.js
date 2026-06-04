@@ -431,6 +431,8 @@ function buildConversationMessages(session = {}, inboundEvents = []) {
   }
 
   for (const event of inboundEvents) {
+    if (event.raw_event?.message_id === 'manual-wf2-check') continue;
+
     messages.push({
       id: `inbound-${event.id}`,
       direction: 'inbound',

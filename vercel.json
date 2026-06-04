@@ -18,7 +18,7 @@
   ],
   "crons": [
     {
-      "path": "/api/scrape/run?limit=10&pages=1",
+      "path": "/api/scrape/run?targetNew=10&maxPages=20&maxListings=30",
       "schedule": "0 6 * * *"
     }
   ]

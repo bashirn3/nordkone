@@ -19,7 +19,7 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [listings, setListings] = useState([]);
   const [conversations, setConversations] = useState([]);
-  const [activeTab, setActiveTab] = useState('leads');
+  const [activeTab, setActiveTab] = useState('listings');
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null);
@@ -150,7 +150,7 @@ function App() {
     setScrapeResult(null);
     setError('');
     try {
-      const result = await apiSend('/api/scrape/run?limit=10&pages=1', { method: 'POST' });
+      const result = await apiSend('/api/scrape/run?targetNew=10&maxPages=20&maxListings=30', { method: 'POST' });
       setScrapeResult(result);
       await load();
     } catch (scrapeError) {
@@ -233,10 +233,10 @@ function App() {
         <article className="panel control-panel">
           <div>
             <p className="eyebrow">Scraper</p>
-            <h2>Manual Vercel check</h2>
+            <h2>Find new leads</h2>
             <p>
-              Runs the same protected scrape path as the cron with a conservative
-              one-page, ten-listing sample.
+              Scans forward through Nettikone until it finds fresh eligible
+              sellers or hits the safety caps.
             </p>
             {scrapeResult ? (
               <code className="scrape-result">
@@ -246,7 +246,7 @@ function App() {
           </div>
           <div className="control-actions compact">
             <button disabled={scraping} onClick={runManualScrape}>
-              {scraping ? 'Scraping...' : 'Run scrape now'}
+              {scraping ? 'Searching...' : 'Find new leads'}
             </button>
           </div>
         </article>
@@ -254,127 +254,20 @@ function App() {
 
       <section className="tabs">
         <button
-          className={activeTab === 'leads' ? 'active' : ''}
-          onClick={() => setActiveTab('leads')}
-        >
-          Leads
-        </button>
-        <button
           className={activeTab === 'listings' ? 'active' : ''}
           onClick={() => setActiveTab('listings')}
         >
           Listings
         </button>
+        <button
+          className={activeTab === 'leads' ? 'active' : ''}
+          onClick={() => setActiveTab('leads')}
+        >
+          Leads
+        </button>
       </section>
 
-      {activeTab === 'leads' ? (
-        <section className="grid leads-grid">
-          <div className="panel table-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Lead inbox</p>
-                <h2>Seller conversations</h2>
-              </div>
-              <span>{conversations.length} sessions</span>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Seller / Machine</th>
-                  <th>Status</th>
-                  <th>Last message</th>
-                  <th>Chat</th>
-                </tr>
-              </thead>
-              <tbody>
-                {conversations.map((conversation) => (
-                  <tr
-                    key={conversation.session_id}
-                    className={
-                      selectedConversation?.session_id === conversation.session_id ? 'selected' : ''
-                    }
-                    onClick={() => setSelectedConversationId(conversation.session_id)}
-                  >
-                    <td>
-                      <strong>{conversation.listing?.machine_title || conversation.number}</strong>
-                      <small>
-                        {conversation.number} · {conversation.listing?.nettikone_id || 'No listing'}
-                      </small>
-                    </td>
-                    <td>
-                      <span className={`pill ${conversation.interest_status || conversation.status}`}>
-                        {statusLabel(conversation.interest_status || conversation.status)}
-                      </span>
-                    </td>
-                    <td>
-                      <span>{conversation.latest_message?.message || 'No messages yet'}</span>
-                      <small>{formatTime(conversation.latest_message?.at || conversation.updated_at)}</small>
-                    </td>
-                    <td>
-                      <button className="small-action" type="button">
-                        View chat
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!conversations.length && !loading ? (
-                  <tr>
-                    <td colSpan="4" className="empty">
-                      No conversations yet.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-
-          <aside className="panel detail lead-detail">
-            {selectedConversation ? (
-              <>
-                <div className="detail-header">
-                  <div>
-                    <p className="eyebrow">Chat session {selectedConversation.session_id}</p>
-                    <h2>{selectedConversation.listing?.machine_title || selectedConversation.number}</h2>
-                    <div className="detail-tags">
-                      <span>{selectedConversation.number}</span>
-                      <span>{statusLabel(selectedConversation.interest_status || selectedConversation.status)}</span>
-                    </div>
-                  </div>
-                  {selectedConversation.listing?.listing_url ? (
-                    <a
-                      className="open-link"
-                      href={selectedConversation.listing.listing_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Listing
-                    </a>
-                  ) : null}
-                </div>
-                <div className="messages drawer-messages">
-                  {selectedConversation.messages.map((message) => (
-                    <article className={`bubble ${message.direction}`} key={message.id}>
-                      <div className="bubble-meta">
-                        <span>{message.sender}</span>
-                        <time>{formatTime(message.at)}</time>
-                      </div>
-                      <p>{message.message}</p>
-                      {message.classification ? (
-                        <small>{statusLabel(message.classification)}</small>
-                      ) : null}
-                    </article>
-                  ))}
-                  {!selectedConversation.messages.length ? (
-                    <p className="empty">No stored messages for this session.</p>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              <p className="empty">Select a lead to view chat.</p>
-            )}
-          </aside>
-        </section>
-      ) : (
+      {activeTab === 'listings' ? (
         <>
           <section className="toolbar">
             <label>
@@ -502,6 +395,113 @@ function App() {
             </aside>
           </section>
         </>
+      ) : (
+        <section className="grid leads-grid">
+          <div className="panel table-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Lead inbox</p>
+                <h2>Seller conversations</h2>
+              </div>
+              <span>{conversations.length} sessions</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Seller / Machine</th>
+                  <th>Status</th>
+                  <th>Last message</th>
+                  <th>Chat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversations.map((conversation) => (
+                  <tr
+                    key={conversation.session_id}
+                    className={
+                      selectedConversation?.session_id === conversation.session_id ? 'selected' : ''
+                    }
+                    onClick={() => setSelectedConversationId(conversation.session_id)}
+                  >
+                    <td>
+                      <strong>{conversation.listing?.machine_title || conversation.number}</strong>
+                      <small>
+                        {conversation.number} · {conversation.listing?.nettikone_id || 'No listing'}
+                      </small>
+                    </td>
+                    <td>
+                      <span className={`pill ${conversation.interest_status || conversation.status}`}>
+                        {statusLabel(conversation.interest_status || conversation.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <span>{conversation.latest_message?.message || 'No messages yet'}</span>
+                      <small>{formatTime(conversation.latest_message?.at || conversation.updated_at)}</small>
+                    </td>
+                    <td>
+                      <button className="small-action" type="button">
+                        View chat
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!conversations.length && !loading ? (
+                  <tr>
+                    <td colSpan="4" className="empty">
+                      No conversations yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <aside className="panel detail lead-detail">
+            {selectedConversation ? (
+              <>
+                <div className="detail-header">
+                  <div>
+                    <p className="eyebrow">Chat session {selectedConversation.session_id}</p>
+                    <h2>{selectedConversation.listing?.machine_title || selectedConversation.number}</h2>
+                    <div className="detail-tags">
+                      <span>{selectedConversation.number}</span>
+                      <span>{statusLabel(selectedConversation.interest_status || selectedConversation.status)}</span>
+                    </div>
+                  </div>
+                  {selectedConversation.listing?.listing_url ? (
+                    <a
+                      className="open-link"
+                      href={selectedConversation.listing.listing_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Listing
+                    </a>
+                  ) : null}
+                </div>
+                <div className="messages drawer-messages">
+                  {selectedConversation.messages.map((message) => (
+                    <article className={`bubble ${message.direction}`} key={message.id}>
+                      <div className="bubble-meta">
+                        <span>{message.sender}</span>
+                        <time>{formatTime(message.at)}</time>
+                      </div>
+                      <p>{message.message}</p>
+                      {message.classification ? (
+                        <small>{statusLabel(message.classification)}</small>
+                      ) : null}
+                    </article>
+                  ))}
+                  {!selectedConversation.messages.length ? (
+                    <p className="empty">No stored messages for this session.</p>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <p className="empty">Select a lead to view chat.</p>
+            )}
+          </aside>
+        </section>
       )}
     </main>
   );

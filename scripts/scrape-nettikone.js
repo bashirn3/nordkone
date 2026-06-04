@@ -22,41 +22,117 @@ export async function runScrape(options = {}) {
   cookieJar.clear();
 
   const dryRun = Boolean(options.dryRun || options['dry-run']);
-  const pages = Number(options.pages || 1);
-  const limit = options.limit ? Number(options.limit) : Infinity;
+  const targetNewLeads = positiveNumber(
+    options.targetNew || options.target_new || options['target-new'] || options.limit,
+    10
+  );
+  const maxPages = positiveNumber(
+    options.maxPages || options.max_pages || options['max-pages'] || options.pages,
+    20
+  );
+  const maxListings = positiveNumber(
+    options.maxListings || options.max_listings || options['max-listings'],
+    Math.max(targetNewLeads * 3, targetNewLeads)
+  );
+  const refreshExisting = Boolean(options.refreshExisting || options.refresh_existing || options['refresh-existing']);
   const category = options.category || DEFAULT_CATEGORY;
   const postedBy = options.postedBy || options['posted-by'] || DEFAULT_POSTED_BY;
   const startUrl = options.url || buildSearchUrl({ category, postedBy, page: 1 });
   const supabase = !dryRun && hasSupabaseConfig() ? createSupabase() : null;
-  const listingUrls = await discoverListingUrls({ pages, category, postedBy, startUrl, hasCustomUrl: Boolean(options.url) });
-  const selected = listingUrls.slice(0, limit);
+  const seenUrls = new Set();
   const stats = {
-    discovered: listingUrls.length,
+    target_new_leads: targetNewLeads,
+    max_pages: maxPages,
+    max_listings: maxListings,
+    pages_scanned: 0,
+    discovered: 0,
     processed: 0,
     upserted: 0,
+    new_listings: 0,
+    existing_listings: 0,
+    new_leads: 0,
+    existing_prospects: 0,
+    new_prospects: 0,
     skipped: 0,
     failed: 0,
+    stop_reason: null,
   };
 
-  for (const url of selected) {
-    try {
-      await sleep(REQUEST_DELAY_MS);
-      const listing = await scrapeListing(url, { category });
-      stats.processed += 1;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const listingUrls = await discoverListingUrlsForPage({
+      page,
+      category,
+      postedBy,
+      startUrl,
+      hasCustomUrl: Boolean(options.url),
+    });
+    stats.pages_scanned += 1;
 
-      if (!listing.normalized_phone) {
-        stats.skipped += 1;
+    if (!listingUrls.length) {
+      stats.stop_reason = 'no_results';
+      break;
+    }
+
+    for (const url of listingUrls) {
+      if (seenUrls.has(url)) continue;
+      seenUrls.add(url);
+      stats.discovered += 1;
+
+      if (stats.processed >= maxListings) {
+        stats.stop_reason = 'max_listings_reached';
+        break;
       }
 
-      if (supabase) {
-        await upsertListing(supabase, listing);
-        stats.upserted += 1;
-      } else {
-        console.log(JSON.stringify(listingSummary(listing), null, 2));
+      try {
+        const nettikoneId = extractNettikoneId(url);
+        const existing = supabase && nettikoneId ? await loadExistingListing(supabase, nettikoneId) : null;
+
+        if (existing && !refreshExisting) {
+          stats.existing_listings += 1;
+          continue;
+        }
+
+        await sleep(REQUEST_DELAY_MS);
+        const listing = await scrapeListing(url, { category });
+        stats.processed += 1;
+
+        if (!listing.normalized_phone) {
+          stats.skipped += 1;
+        }
+
+        if (supabase) {
+          const result = await upsertListing(supabase, listing, { existing });
+          stats.upserted += 1;
+          if (result.isNewListing) stats.new_listings += 1;
+          if (result.isNewProspect) stats.new_prospects += 1;
+          if (result.isExistingProspect) stats.existing_prospects += 1;
+          if (result.isNewListing && listing.normalized_phone) stats.new_leads += 1;
+        } else {
+          console.log(JSON.stringify(listingSummary(listing), null, 2));
+          if (listing.normalized_phone) stats.new_leads += 1;
+        }
+
+        if (stats.new_leads >= targetNewLeads) {
+          stats.stop_reason = 'target_new_leads_reached';
+          break;
+        }
+      } catch (error) {
+        stats.failed += 1;
+        console.error(`Failed ${url}: ${error.message}`);
       }
-    } catch (error) {
-      stats.failed += 1;
-      console.error(`Failed ${url}: ${error.message}`);
+    }
+
+    if (stats.stop_reason) break;
+    await sleep(REQUEST_DELAY_MS);
+  }
+
+  if (!stats.stop_reason) {
+    if (stats.new_leads >= targetNewLeads) {
+      stats.stop_reason = 'target_new_leads_reached';
+    } else if (stats.processed >= maxListings) {
+      stats.stop_reason = 'max_listings_reached';
+    } else {
+      stats.stop_reason = 'max_pages_reached';
     }
   }
 
@@ -71,27 +147,34 @@ async function main() {
 
 async function discoverListingUrls({ pages, category, postedBy, startUrl, hasCustomUrl }) {
   const urls = new Set();
-  const rootUrl = new URL(startUrl, BASE_URL);
 
   for (let page = 1; page <= pages; page += 1) {
-    const pageUrl = hasCustomUrl
-      ? page === 1
-        ? rootUrl.toString()
-        : withPage(rootUrl, page)
-      : buildSearchUrl({ category, postedBy, page });
-
-    console.log(`Discovering ${pageUrl}`);
-    const html = await fetchText(pageUrl);
-    const $ = cheerio.load(html);
-
-    $('a[href]').each((_, link) => {
-      const href = $(link).attr('href');
-      const normalized = normalizeListingUrl(href);
-      if (normalized) urls.add(normalized);
-    });
-
-    await sleep(REQUEST_DELAY_MS);
+    for (const url of await discoverListingUrlsForPage({ page, category, postedBy, startUrl, hasCustomUrl })) {
+      urls.add(url);
+    }
   }
+
+  return [...urls];
+}
+
+async function discoverListingUrlsForPage({ page, category, postedBy, startUrl, hasCustomUrl }) {
+  const urls = new Set();
+  const rootUrl = new URL(startUrl, BASE_URL);
+  const pageUrl = hasCustomUrl
+    ? page === 1
+      ? rootUrl.toString()
+      : withPage(rootUrl, page)
+    : buildSearchUrl({ category, postedBy, page });
+
+  console.log(`Discovering ${pageUrl}`);
+  const html = await fetchText(pageUrl);
+  const $ = cheerio.load(html);
+
+  $('a[href]').each((_, link) => {
+    const href = $(link).attr('href');
+    const normalized = normalizeListingUrl(href);
+    if (normalized) urls.add(normalized);
+  });
 
   return [...urls];
 }
@@ -154,19 +237,25 @@ async function scrapeListing(url, { category }) {
   };
 }
 
-async function upsertListing(supabase, listing) {
+async function upsertListing(supabase, listing, { existing } = {}) {
   const prospect = listing.normalized_phone ? await upsertSellerProspect(supabase, listing) : null;
-  const existing = await loadExistingListing(supabase, listing.nettikone_id);
+  const existingListing = existing || (await loadExistingListing(supabase, listing.nettikone_id));
 
   const { error } = await supabase.from('nordkone_listings').upsert(
     toNordKoneListing(listing, {
-      prospectId: prospect?.id || existing?.prospect_id || null,
-      existing,
+      prospectId: prospect?.row?.id || existingListing?.prospect_id || null,
+      existing: existingListing,
     }),
     { onConflict: 'client_key,nettikone_id' }
   );
 
   if (error) throw error;
+
+  return {
+    isNewListing: !existingListing,
+    isNewProspect: Boolean(prospect?.isNew),
+    isExistingProspect: Boolean(prospect && !prospect.isNew),
+  };
 }
 
 async function upsertSellerProspect(supabase, listing) {
@@ -193,7 +282,7 @@ async function upsertSellerProspect(supabase, listing) {
       .single();
 
     if (error) throw error;
-    return data;
+    return { row: data, isNew: false };
   }
 
   const { data, error } = await supabase
@@ -206,7 +295,7 @@ async function upsertSellerProspect(supabase, listing) {
     .single();
 
   if (error) throw error;
-  return data;
+  return { row: data, isNew: true };
 }
 
 async function loadExistingListing(supabase, nettikoneId) {
@@ -537,6 +626,12 @@ function parseArgs(argv) {
     }
   }
   return parsed;
+}
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.floor(number);
 }
 
 function parseEuro(value) {

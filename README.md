@@ -61,21 +61,24 @@ the Vercel project:
 - `NETTIKONE_DEFAULT_CATEGORY=kaivinkone`
 - `NETTIKONE_DEFAULT_POSTED_BY=S`
 - `NETTIKONE_REQUEST_DELAY_MS=750`
-- `SCRAPE_CRON_LIMIT=10`
-- `SCRAPE_CRON_PAGES=1`
+- `SCRAPE_TARGET_NEW=10`
+- `SCRAPE_MAX_PAGES=20`
+- `SCRAPE_MAX_LISTINGS=30`
 - `VITE_API_KEY` with the same value as `API_KEY`
 
-`vercel.json` runs a conservative daily scrape at `06:00 UTC` through:
+`vercel.json` runs an adaptive daily scrape at `06:00 UTC` through:
 
 ```text
-/api/scrape/run?limit=10&pages=1
+/api/scrape/run?targetNew=10&maxPages=20&maxListings=30
 ```
 
-You can manually trigger a protected scrape:
+The scraper skips listings already known by Nettikone ID and keeps paging until
+it finds the target number of fresh eligible sellers or hits the safety caps.
+You can manually trigger the same protected scrape:
 
 ```bash
 curl -H "X-API-Key: $API_KEY" \
-  "https://YOUR-VERCEL-URL/api/scrape/run?limit=10&pages=1"
+  "https://YOUR-VERCEL-URL/api/scrape/run?targetNew=10&maxPages=20&maxListings=30"
 ```
 
 ## Data Model
